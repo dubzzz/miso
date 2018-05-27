@@ -1,5 +1,6 @@
 const diff = require('./diff');
 const jsdom = require('jsdom');
+const fc = require('fast-check');
 
 function vnode(tag, children, props, css, ns, ref, oc, od, key) {
     return {
@@ -56,9 +57,12 @@ function vtextKeyed(txt, key) {
     return {
         'type': 'vtext',
         'text': txt,
-	'key': key
+        'key': key
     };
 }
+
+// fast-check arbitraries
+const vtextArbitrary = fc.unicodeString().map(vtext);
 
 
 // base case
@@ -114,6 +118,24 @@ test('Should diff two different text nodes', () => {
     };
     diff(currentNode, newNode, body, doc);
     expect(newNode.domRef.wholeText).toBe('bar')
+});
+
+test('Should diff two text nodes', () => {
+    fc.assert(
+        fc.property(
+            vtextArbitrary, vtextArbitrary,
+            (node1, node2) => {
+                const doc = new jsdom.JSDOM().window.document;
+                const body = doc.body;
+
+                diff(null, node1, body, doc);
+                expect(node1.domRef.wholeText).toBe(node1.text);
+
+                diff(node1, node2, body, doc);
+                expect(node2.domRef.wholeText).toBe(node2.text)
+            }
+        )
+    );
 });
 
 test('Should create a new DOM node', () => {
@@ -230,6 +252,26 @@ test('Should remove a child', () => {
     var newNode = vnode('div', []);
     diff(node, newNode, body, document);
     expect(node.domRef.children.length).toBe(0);
+});
+
+test('Should remove or add children', () => {
+    const vnodeArbitrary = fc.array(fc.constant(vnode('div', [])))
+        .map(children => vnode('div', children.map(c => Object.assign({}, c))));
+    fc.assert(
+        fc.property(
+            vnodeArbitrary, vnodeArbitrary,
+            (node1, node2) => {
+                const document = new jsdom.JSDOM().window.document;
+                const body = document.body;
+
+                diff(null, node1, body, document);
+                expect(node1.domRef.children.length).toBe(node1.children.length);
+
+                diff(node1, node2, body, document);
+                expect(node2.domRef.children.length).toBe(node2.children.length);
+            }
+        )
+    );
 });
 
 
